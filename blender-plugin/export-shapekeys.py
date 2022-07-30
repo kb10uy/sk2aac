@@ -72,6 +72,7 @@ class ShapeKeyExporter(bpy.types.Operator):
             )
 
         animation_descriptor = {
+            "name": "AvatarName",
             "animation_path": "Assets/",
             "animation_objects": animation_objects,
         }
