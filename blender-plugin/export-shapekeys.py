@@ -5,7 +5,7 @@ import json
 bl_info = {
     "name": "Shape Key Exporter",
     "author": "kb10uy",
-    "version": (0, 5),
+    "version": (1, 0),
     "blender": (3, 2, 0),
     "location": "",
     "description": "",
@@ -20,7 +20,7 @@ class ShapeKeyExporter(bpy.types.Operator):
     bl_options = {"REGISTER"}
 
     def execute(self, context: Any) -> set[str]:
-        shape_key_table = {}
+        animation_objects = []
         for selected_object in bpy.context.selected_objects:
             if selected_object.type != "MESH":
                 self.report(
@@ -31,7 +31,12 @@ class ShapeKeyExporter(bpy.types.Operator):
             mesh_object: bpy.types.Mesh = selected_object.data
             shape_key_blocks = mesh_object.shape_keys.key_blocks
 
-            object_shape_keys = []
+            animation_object = {
+                "name": selected_object.name,
+                "groups": [],
+            }
+
+            shapes = []
             basis_skipped = False
             parameter_index = 1
             for name, shape_key in shape_key_blocks.items():
@@ -45,35 +50,39 @@ class ShapeKeyExporter(bpy.types.Operator):
                     )
                     continue
 
-                object_shape_keys.append({
+                shapes.append({
                     "animation_name": name,
-                    "shape_key_name": name,
+                    "shape_name": name,
                     "index": parameter_index,
                 })
                 parameter_index += 1
 
+            unset_group = {
+                "group_name": "Unset",
+                "animation_type": "select",
+                "emit": False,
+                "shapes": shapes,
+            }
+            animation_object["groups"] = [unset_group]
+            animation_objects.append(animation_object)
+
             self.report(
                 {"DEBUG"},
-                f"Exported {len(object_shape_keys)} key(s) for {mesh_object.name}"
+                f"Exported {len(shapes)} key(s) for {mesh_object.name}"
             )
-            shape_key_table[selected_object.name] = {
-                "Uncategorized": {
-                    "emit": False,
-                    "type": "select",
-                    "keys": object_shape_keys,
-                },
-            }
 
-        shape_key_table_json = json.dumps(
-            {
-                "animation_path": "Assets/",
-                "exported_objects": shape_key_table,
-            },
+        animation_descriptor = {
+            "animation_path": "Assets/",
+            "animation_objects": animation_objects,
+        }
+
+        json_string = json.dumps(
+            animation_descriptor,
             ensure_ascii=False,
             indent=4
         )
 
-        self.report({"INFO"}, shape_key_table_json)
+        self.report({"INFO"}, json_string)
         return {"FINISHED"}
 
 
