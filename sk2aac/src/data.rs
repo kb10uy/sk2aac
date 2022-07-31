@@ -33,4 +33,5 @@ pub struct AnimationShape {
     pub animation_name: String,
     pub shape_name: String,
     pub index: Option<usize>,
+    pub value: Option<f64>,
 }

@@ -44,8 +44,7 @@
                     "emit": true,
                     "shape": {
                         "animation_name": "Cheek",
-                        "shape_name": "頬染め",
-                        "index": 1
+                        "shape_name": "頬染め"
                     }
                 }
             ]
