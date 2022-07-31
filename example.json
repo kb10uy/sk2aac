@@ -1,0 +1,70 @@
+{
+    "name": "AvatarName",
+    "animation_path": "Assets/",
+    "animation_objects": [
+        {
+            "name": "Face",
+            "groups": [
+                {
+                    "group_name": "Eyebrows",
+                    "animation_type": "select",
+                    "emit": true,
+                    "shapes": [
+                        {
+                            "animation_name": "Smile",
+                            "shape_name": "眉_笑顔",
+                            "index": 1
+                        },
+                        {
+                            "animation_name": "Angry",
+                            "shape_name": "眉_怒",
+                            "index": 2
+                        }
+                    ]
+                },
+                {
+                    "group_name": "Eyelids",
+                    "animation_type": "select",
+                    "emit": true,
+                    "shapes": [
+                        {
+                            "animation_name": "Smile",
+                            "shape_name": "にっこり",
+                            "index": 1
+                        },
+                        {
+                            "animation_name": "Relaxed",
+                            "shape_name": "==",
+                            "index": 2
+                        }
+                    ]
+                },
+                {
+                    "group_name": "Cheek",
+                    "animation_type": "switch",
+                    "emit": true,
+                    "shape": {
+                        "animation_name": "Cheek",
+                        "shape_name": "頬染め",
+                        "index": 1
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Body",
+            "groups": [
+                {
+                    "group_name": "BodyShrink",
+                    "animation_type": "switch",
+                    "emit": true,
+                    "shape": {
+                        "animation_name": "Shrink",
+                        "shape_name": "素体縮小",
+                        "index": 1
+                    }
+                }
+            ]
+        }
+    ]
+}
