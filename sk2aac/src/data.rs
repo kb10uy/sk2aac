@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnimationDescriptor {
     pub name: String,
-    pub animation_path: String,
     pub animation_objects: Vec<AnimationObject>,
 }
 
@@ -15,7 +14,7 @@ pub struct AnimationObject {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnimationGroup {
-    pub group_name: String,
+    pub name: String,
     pub emit: bool,
 
     #[serde(flatten)]
@@ -33,5 +32,5 @@ pub enum AnimationGroupShapes {
 pub struct AnimationShape {
     pub animation_name: String,
     pub shape_name: String,
-    pub index: usize,
+    pub index: Option<usize>,
 }

@@ -1,12 +1,11 @@
 {
     "name": "AvatarName",
-    "animation_path": "Assets/",
     "animation_objects": [
         {
             "name": "Face",
             "groups": [
                 {
-                    "group_name": "Eyebrows",
+                    "name": "Eyebrows",
                     "animation_type": "select",
                     "emit": true,
                     "shapes": [
@@ -23,7 +22,7 @@
                     ]
                 },
                 {
-                    "group_name": "Eyelids",
+                    "name": "Eyelids",
                     "animation_type": "select",
                     "emit": true,
                     "shapes": [
@@ -40,7 +39,7 @@
                     ]
                 },
                 {
-                    "group_name": "Cheek",
+                    "name": "Cheek",
                     "animation_type": "switch",
                     "emit": true,
                     "shape": {
@@ -55,13 +54,12 @@
             "name": "Body",
             "groups": [
                 {
-                    "group_name": "BodyShrink",
+                    "name": "BodyShrink",
                     "animation_type": "switch",
                     "emit": true,
                     "shape": {
                         "animation_name": "Shrink",
-                        "shape_name": "素体縮小",
-                        "index": 1
+                        "shape_name": "素体縮小"
                     }
                 }
             ]

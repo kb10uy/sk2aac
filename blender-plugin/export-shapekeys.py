@@ -58,9 +58,9 @@ class ShapeKeyExporter(bpy.types.Operator):
                 parameter_index += 1
 
             unset_group = {
-                "group_name": "Unset",
-                "animation_type": "select",
+                "name": "Unset",
                 "emit": False,
+                "animation_type": "select",
                 "shapes": shapes,
             }
             animation_object["groups"] = [unset_group]
@@ -73,7 +73,6 @@ class ShapeKeyExporter(bpy.types.Operator):
 
         animation_descriptor = {
             "name": "AvatarName",
-            "animation_path": "Assets/",
             "animation_objects": animation_objects,
         }
 

@@ -1,8 +1,10 @@
-use std::io::{prelude::*, Error as IoError};
-
 use crate::data::{AnimationDescriptor, AnimationGroup, AnimationGroupShapes, AnimationObject};
 
-pub fn emit_descriptor<W: Write>(writer: &mut W, descriptor: &AnimationDescriptor) -> Result<String, IoError> {
+use std::io::prelude::*;
+
+use anyhow::{bail, ensure, Result};
+
+pub fn emit_descriptor<W: Write>(writer: &mut W, descriptor: &AnimationDescriptor) -> Result<String> {
     let avatar_name = &descriptor.name;
     let asset_key = format!("SK2AAC_{avatar_name}");
     let class_name = format!("SK2AACGenerator_{avatar_name}");
@@ -48,7 +50,7 @@ pub fn emit_descriptor<W: Write>(writer: &mut W, descriptor: &AnimationDescripto
     Ok(class_name)
 }
 
-pub fn emit_object<W: Write>(writer: &mut W, object: &AnimationObject) -> Result<(), IoError> {
+pub fn emit_object<W: Write>(writer: &mut W, object: &AnimationObject) -> Result<()> {
     let object_name = &object.name;
 
     writeln!(writer, r#"        // Object {object_name}"#)?;
@@ -63,12 +65,12 @@ pub fn emit_object<W: Write>(writer: &mut W, object: &AnimationObject) -> Result
     Ok(())
 }
 
-pub fn emit_group<W: Write>(writer: &mut W, object_name: &str, group: &AnimationGroup) -> Result<(), IoError> {
+pub fn emit_group<W: Write>(writer: &mut W, object_name: &str, group: &AnimationGroup) -> Result<()> {
     if !group.emit {
         return Ok(());
     }
 
-    let group_name = &group.group_name;
+    let group_name = &group.name;
     let layer_name = format!("{object_name} {group_name}");
 
     writeln!(writer, r#"            // Group {group_name}"#)?;
@@ -87,8 +89,12 @@ pub fn emit_group<W: Write>(writer: &mut W, object_name: &str, group: &Animation
             for shape in shapes {
                 let animation_name = format!("{object_name}-{}", shape.animation_name);
                 let shape_name = &shape.shape_name;
-                let shape_index = shape.index;
-                let state_var = format!("stateEnabled{}", shape.index);
+                let shape_index = match shape.index {
+                    Some(i) => i,
+                    None => bail!("Select group must have index"),
+                };
+                let state_var = format!("stateEnabled{shape_index}");
+
                 if aligned {
                     writeln!(writer, r#"                var {state_var} = layer.NewState("{animation_name}").WithAnimation(aac.NewClip("{animation_name}").BlendShape(renderer, "{shape_name}", 100.0f));"#)?;
                 } else {
@@ -104,8 +110,10 @@ pub fn emit_group<W: Write>(writer: &mut W, object_name: &str, group: &Animation
         }
         AnimationGroupShapes::Switch { shape } => {
             // Object-Shape-Enabled
+            ensure!(shape.index.is_none(), "Switch group must not have index");
             let animation_name = format!("{object_name}-{}-Enabled", shape.animation_name);
             let shape_name = &shape.shape_name;
+
             writeln!(writer, r#"                var parameter = fxDefault.BoolParameter("{group_name}");"#)?;
             writeln!(writer, r#"                var stateEnabled = layer.NewState("Enabled").WithAnimation(aac.NewClip("{animation_name}").BlendShape(renderer, "{shape_name}", 100.0f));"#)?;
             writeln!(writer, r#"                stateDisabled.TransitionsTo(stateEnabled).When(parameter.IsTrue());"#)?;
