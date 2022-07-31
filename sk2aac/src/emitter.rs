@@ -91,7 +91,6 @@ pub fn emit_group<W: Write>(writer: &mut W, object_name: &str, group: &Animation
                 writeln!(writer, r#"                        .BlendShape(renderer, "{shape_name}", 0.0f)"#)?;
             }
             writeln!(writer, r#"                );"#)?;
-            writeln!(writer)?;
 
             // Emit enabled states.
             const ALIGN_UNIT: usize = 8;
@@ -104,6 +103,7 @@ pub fn emit_group<W: Write>(writer: &mut W, object_name: &str, group: &Animation
                 let shape_value = format!("{:.1}f", shape.value.unwrap_or(1.0) * 100.0);
                 let state_var = format!("stateEnabled{shape_index}");
 
+                writeln!(writer)?;
                 write!(writer, r#"                var {state_var} = layer.NewState("{animation_name}").WithAnimation(aac.NewClip("{layer_name}_{animation_name}").BlendShape(renderer, "{shape_name}", {shape_value}))"#)?;
                 if i % ALIGN_UNIT == 0 {
                     write!(writer, r#".RightOf({align_target})"#)?;
@@ -113,7 +113,6 @@ pub fn emit_group<W: Write>(writer: &mut W, object_name: &str, group: &Animation
 
                 writeln!(writer, r#"                stateDisabled.TransitionsTo({state_var}).When(parameter.IsEqualTo({shape_index}));"#)?;
                 writeln!(writer, r#"                {state_var}.Exits().When(parameter.IsNotEqualTo({shape_index}));"#)?;
-                writeln!(writer)?;
             }
         }
         AnimationGroupShapes::Switch { shape } => {
