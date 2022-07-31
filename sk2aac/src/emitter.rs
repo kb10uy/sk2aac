@@ -10,11 +10,14 @@ pub fn emit_descriptor<W: Write>(writer: &mut W, descriptor: &AnimationDescripto
     let class_name = format!("SK2AACGenerator_{avatar_name}");
 
     writeln!(writer, r#"using UnityEngine;"#)?;
+    writeln!(writer, r#"#if UNITY_EDITOR"#)?;
     writeln!(writer, r#"using UnityEditor;"#)?;
     writeln!(writer, r#"using UnityEditor.Animations;"#)?;
     writeln!(writer, r#"using VRC.SDK3.Avatars.Components;"#)?;
     writeln!(writer, r#"using AnimatorAsCodeFramework.Examples;"#)?;
+    writeln!(writer, r#"#endif"#)?;
     writeln!(writer)?;
+    writeln!(writer, r#"#if UNITY_EDITOR"#)?;
     writeln!(writer, r#"[CustomEditor(typeof({class_name}))]"#)?;
     writeln!(writer, r#"public class {class_name}_Editor : Editor"#)?;
     writeln!(writer, r#"{{"#)?;
@@ -28,9 +31,11 @@ pub fn emit_descriptor<W: Write>(writer: &mut W, descriptor: &AnimationDescripto
     writeln!(writer, r#"        }}"#)?;
     writeln!(writer, r#"    }}"#)?;
     writeln!(writer, r#"}}"#)?;
+    writeln!(writer, r#"#endif"#)?;
     writeln!(writer)?;
     writeln!(writer, r#"public class {class_name} : MonoBehaviour"#)?;
     writeln!(writer, r#"{{"#)?;
+    writeln!(writer, r#"#if UNITY_EDITOR"#)?;
     writeln!(writer, r#"    public AnimatorController TargetContainer;"#)?;
     writeln!(writer, r#"    public string AssetKey = "{asset_key}";"#)?;
     writeln!(writer)?;
@@ -44,6 +49,7 @@ pub fn emit_descriptor<W: Write>(writer: &mut W, descriptor: &AnimationDescripto
         emit_object(writer, object)?;
     }
     writeln!(writer, r#"    }}"#)?;
+    writeln!(writer, r#"#endif"#)?;
     writeln!(writer, r#"}}"#)?;
 
     Ok(class_name)
