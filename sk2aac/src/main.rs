@@ -1,7 +1,6 @@
-mod code_writer;
+mod codegen;
 mod data;
-mod data2;
-mod data_raw;
+mod descriptor;
 mod emitter;
 
 use crate::{data::AnimationDescriptor, data2::Descriptor};

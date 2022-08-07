@@ -69,6 +69,12 @@ impl<'a, W: Write> CodeWriter<'a, W> {
         Ok(())
     }
 
+    /// Writes a blank line.
+    pub fn write_empty(&mut self) -> Result<(), IoError> {
+        writeln!(self.writer)?;
+        Ok(())
+    }
+
     /// Flushes current content.
     pub fn flush(&mut self) -> Result<(), IoError> {
         if let Some((text, with_indent)) = self.termination {

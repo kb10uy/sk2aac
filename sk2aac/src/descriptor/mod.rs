@@ -1,4 +1,6 @@
-use crate::data_raw::{
+mod raw;
+
+use crate::descriptor::raw::{
     RawDescriptor, RawShapeKeyCommon, RawShapeKeyDrive, RawShapeKeyGroup, RawShapeKeyOption,
     RawShapeKeySwitch,
 };
