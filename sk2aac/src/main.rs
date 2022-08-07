@@ -3,7 +3,7 @@ mod data;
 mod descriptor;
 mod emitter;
 
-use crate::{data::AnimationDescriptor, data2::Descriptor};
+use crate::{data::AnimationDescriptor, descriptor::Descriptor};
 
 use std::{
     env::args,

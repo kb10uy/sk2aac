@@ -1,4 +1,7 @@
-use std::io::{Error as IoError, Write};
+use std::{
+    fmt::Display,
+    io::{Error as IoError, Write},
+};
 
 /// Helps write out indented codes.
 pub struct CodeWriter<'a, W>
@@ -45,7 +48,7 @@ impl<'a, W: Write> CodeWriter<'a, W> {
 
     /// Extends current instance and wraps with ifdef.
     pub fn wrap_ifdef(&mut self, identifier: &str) -> Result<CodeWriter<W>, IoError> {
-        self.write_without_indent(&format!("#ifdef {identifier}"))?;
+        self.write_head(format_args!("#ifdef {identifier}"))?;
         Ok(CodeWriter {
             writer: self.writer,
             indent_width: self.indent_width,
@@ -55,15 +58,14 @@ impl<'a, W: Write> CodeWriter<'a, W> {
     }
 
     /// Writes a line.
-    pub fn write(&mut self, line: &str) -> Result<(), IoError> {
-        write!(self.writer, "{}", self.indent_spaces)?;
-        write!(self.writer, "{line}")?;
+    pub fn write<D: Display>(&mut self, line: D) -> Result<(), IoError> {
+        write!(self.writer, "{}{line}", self.indent_spaces)?;
         writeln!(self.writer)?;
         Ok(())
     }
 
     /// Writes a line without current indent.
-    pub fn write_without_indent(&mut self, line: &str) -> Result<(), IoError> {
+    pub fn write_head<D: Display>(&mut self, line: D) -> Result<(), IoError> {
         write!(self.writer, "{line}")?;
         writeln!(self.writer)?;
         Ok(())
@@ -81,7 +83,7 @@ impl<'a, W: Write> CodeWriter<'a, W> {
             if with_indent {
                 self.write(text)?;
             } else {
-                self.write_without_indent(text)?;
+                self.write_head(text)?;
             }
             self.writer.flush()?;
             self.termination = None;
