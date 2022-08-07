@@ -35,6 +35,7 @@ pub struct RawShapeKeyGroup {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
 pub enum RawShapeKeyOption {
     Simple(String),
     Complex {

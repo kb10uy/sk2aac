@@ -1,16 +1,66 @@
 use crate::data_raw::{
-    RawShapeKeyCommon, RawShapeKeyDrive, RawShapeKeyGroup, RawShapeKeyOption, RawShapeKeySwitch,
+    RawDescriptor, RawShapeKeyCommon, RawShapeKeyDrive, RawShapeKeyGroup, RawShapeKeyOption,
+    RawShapeKeySwitch,
 };
 
 use std::num::NonZeroUsize;
 
 use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
 
+/// Represents a whole descriptor object.
 #[derive(Debug, Clone, Serialize)]
 pub struct Descriptor {
+    /// Avatar name.
     pub name: String,
+
+    /// Shape key switces.
     pub shape_switches: Vec<ShapeKeySwitch>,
+
+    /// Shape key groups.
     pub shape_groups: Vec<ShapeKeyGroup>,
+}
+
+impl Descriptor {
+    fn from_raw<'de, D>(raw: RawDescriptor) -> Result<Descriptor, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let shape_switches = raw
+            .shape_switches
+            .into_iter()
+            .flatten()
+            .map(|s| ShapeKeySwitch::from_raw::<'de, D>(s))
+            .try_fold(vec![], |mut v, o| {
+                v.push(o?);
+                Ok(v)
+            })?;
+        let shape_groups = raw
+            .shape_groups
+            .into_iter()
+            .flatten()
+            .map(|s| ShapeKeyGroup::from_raw::<'de, D>(s))
+            .try_fold(vec![], |mut v, o| {
+                v.push(o?);
+                Ok(v)
+            })?;
+
+        Ok(Descriptor {
+            name: raw.name,
+            shape_switches,
+            shape_groups,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for Descriptor {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawDescriptor::deserialize(deserializer)?;
+        let descriptor = Descriptor::from_raw::<'de, D>(raw)?;
+        Ok(descriptor)
+    }
 }
 
 /// Represents common part of shape key layers.
@@ -111,6 +161,7 @@ impl<'de> Deserialize<'de> for ShapeKeySwitch {
     }
 }
 
+/// Represents a group of shape key animations.
 #[derive(Debug, Clone, Serialize)]
 pub struct ShapeKeyGroup {
     /// Common part.
@@ -172,10 +223,16 @@ impl<'de> Deserialize<'de> for ShapeKeyGroup {
     }
 }
 
+/// A option in `ShapeKeyGroup`.
 #[derive(Debug, Clone, Serialize)]
 pub struct ShapeKeyOption {
+    /// Option label.
     label: String,
+
+    /// Index value for Unity AnimatorController State.
     index: Option<NonZeroUsize>,
+
+    /// Shape keys to move.
     shapes: Vec<ShapeKeyDrive>,
 }
 
@@ -242,8 +299,11 @@ impl<'de> Deserialize<'de> for ShapeKeyOption {
 /// Drive information of a shape key.
 #[derive(Debug, Clone, Serialize)]
 pub struct ShapeKeyDrive {
-    shape: String,
-    value: NormalizedF64,
+    /// Shape key name.
+    pub shape: String,
+
+    /// Shape key value.
+    pub value: NormalizedF64,
 }
 
 impl ShapeKeyDrive {
