@@ -35,6 +35,16 @@ impl<'a, W: Write> CodeWriter<'a, W> {
         }
     }
 
+    /// Executes function with indented.
+    pub fn with_indent<'f, T, F>(&'f mut self, f: F) -> Result<T, IoError>
+    where
+        F: FnOnce(CodeWriter<'f, W>) -> Result<T, IoError>,
+    {
+        let inner = self.indent();
+        let returned = f(inner)?;
+        Ok(returned)
+    }
+
     /// Extends current instance and indents with block.
     pub fn indent_with_block(&mut self) -> Result<CodeWriter<W>, IoError> {
         self.write("{")?;
@@ -46,6 +56,16 @@ impl<'a, W: Write> CodeWriter<'a, W> {
         })
     }
 
+    /// Executes function with indented block.
+    pub fn with_block<'f, T, F>(&'f mut self, f: F) -> Result<T, IoError>
+    where
+        F: FnOnce(CodeWriter<'f, W>) -> Result<T, IoError>,
+    {
+        let inner = self.indent_with_block()?;
+        let returned = f(inner)?;
+        Ok(returned)
+    }
+
     /// Extends current instance and wraps with ifdef.
     pub fn wrap_ifdef(&mut self, identifier: &str) -> Result<CodeWriter<W>, IoError> {
         self.write_head(format_args!("#ifdef {identifier}"))?;
@@ -55,6 +75,16 @@ impl<'a, W: Write> CodeWriter<'a, W> {
             indent_spaces: self.indent_spaces.clone(),
             termination: Some(("#endif", false)),
         })
+    }
+
+    /// Executes function with ifdef.
+    pub fn with_ifdef<'f, T, F>(&'f mut self, identifier: &str, f: F) -> Result<T, IoError>
+    where
+        F: FnOnce(CodeWriter<'f, W>) -> Result<T, IoError>,
+    {
+        let inner = self.wrap_ifdef(identifier)?;
+        let returned = f(inner)?;
+        Ok(returned)
     }
 
     /// Writes a line.
@@ -81,10 +111,11 @@ impl<'a, W: Write> CodeWriter<'a, W> {
     pub fn flush(&mut self) -> Result<(), IoError> {
         if let Some((text, with_indent)) = self.termination {
             if with_indent {
-                self.write(text)?;
-            } else {
-                self.write_head(text)?;
+                let prev_indent = self.indent_spaces.len() - self.indent_width;
+                let indent_space = &self.indent_spaces[..prev_indent];
+                write!(self.writer, "{indent_space}")?;
             }
+            self.write_head(text)?;
             self.writer.flush()?;
             self.termination = None;
         }

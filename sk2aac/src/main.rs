@@ -3,12 +3,12 @@ mod data;
 mod descriptor;
 mod emitter;
 
-use crate::{data::AnimationDescriptor, descriptor::Descriptor};
+use crate::{data::AnimationDescriptor, descriptor::Descriptor, codegen::AacCodeGenerator};
 
 use std::{
     env::args,
     fs::{read_to_string, File},
-    io::BufWriter,
+    io::{BufWriter, stdout},
 };
 
 use anyhow::{bail, Result};
@@ -23,6 +23,9 @@ fn main() -> Result<()> {
     }
     let descriptor: Descriptor = toml_from_str(&read_to_string(&args[1])?)?;
     println!("{descriptor:?}");
+
+    let mut stdout = stdout().lock();
+    let acg = AacCodeGenerator::new(&mut stdout, &descriptor.name)?;
 
     // let mut output_file = BufWriter::new(File::create(&args[2])?);
     // let class_name = emit_descriptor(&mut output_file, &descriptor)?;

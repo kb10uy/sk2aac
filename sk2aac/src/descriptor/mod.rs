@@ -32,19 +32,13 @@ impl Descriptor {
             .into_iter()
             .flatten()
             .map(|s| ShapeKeySwitch::from_raw::<'de, D>(s))
-            .try_fold(vec![], |mut v, o| {
-                v.push(o?);
-                Ok(v)
-            })?;
+            .collect::<Result<_, _>>()?;
         let shape_groups = raw
             .shape_groups
             .into_iter()
             .flatten()
             .map(|s| ShapeKeyGroup::from_raw::<'de, D>(s))
-            .try_fold(vec![], |mut v, o| {
-                v.push(o?);
-                Ok(v)
-            })?;
+            .collect::<Result<_, _>>()?;
 
         Ok(Descriptor {
             name: raw.name,
@@ -193,19 +187,13 @@ impl ShapeKeyGroup {
             .into_iter()
             .flatten()
             .map(|d| ShapeKeyDrive::from_raw::<'de, D>(d, 1.0))
-            .try_fold(vec![], |mut v, o| {
-                v.push(o?);
-                Ok(v)
-            })?;
+            .collect::<Result<_, _>>()?;
         let options = raw
             .options
             .into_iter()
             .flatten()
             .map(|o| ShapeKeyOption::from_raw::<'de, D>(o))
-            .try_fold(vec![], |mut v, o| {
-                v.push(o?);
-                Ok(v)
-            })?;
+            .collect::<Result<_, _>>()?;
         Ok(ShapeKeyGroup {
             common,
             defaults,
@@ -271,10 +259,7 @@ impl ShapeKeyOption {
                     .into_iter()
                     .flatten()
                     .map(|s| ShapeKeyDrive::from_raw::<'de, D>(s, default_value))
-                    .try_fold(vec![], |mut v, o| {
-                        v.push(o?);
-                        Ok(v)
-                    })?;
+                    .collect::<Result<_, _>>()?;
 
                 ShapeKeyOption {
                     label,

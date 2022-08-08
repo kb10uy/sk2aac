@@ -19,6 +19,7 @@ pub fn emit_descriptor<W: Write>(
 
     let mut root = CodeWriter::new(writer, 4);
 
+    /*
     root.write(r#"using UnityEngine;"#)?;
     {
         let mut using = root.wrap_ifdef("UNITY_EDITOR")?;
@@ -46,9 +47,10 @@ pub fn emit_descriptor<W: Write>(
         ce.write(r#"}}"#)?;
     }
     root.write_empty()?;
+    */
 
     {
-        root.write(format_args!(r#"public class {class_name} : MonoBehaviour"#));
+        root.write(format_args!(r#"public class {class_name} : MonoBehaviour"#))?;
         let mut class = root.indent_with_block()?;
         let mut class = class.wrap_ifdef("UNITY_EDITOR")?;
 
