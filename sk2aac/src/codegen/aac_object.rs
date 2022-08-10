@@ -2,7 +2,7 @@ use crate::codegen::CodeWriter;
 
 use std::{
     io::{prelude::*, Result as IoResult},
-    iter::{once, repeat},
+    iter::{once, repeat, zip},
 };
 
 /// Emits piece of AAC code.
@@ -243,14 +243,14 @@ impl<'a> Cond<'a> {
         match self {
             Cond::Or(and_clauses) => {
                 let or_splits = once("").chain(repeat(".Or()"));
-                for (and_clause, or) in and_clauses.into_iter().zip(or_splits) {
+                for (and_clause, or) in zip(and_clauses, or_splits) {
                     write!(w, r#"{or}"#)?;
                     and_clause.write(w)?;
                 }
             }
             Cond::And(terms) => {
                 let method_names = once("When").chain(repeat("And"));
-                for (term, method) in terms.into_iter().zip(method_names) {
+                for (term, method) in zip(terms, method_names) {
                     let term = match term {
                         Cond::Term(t) => t,
                         _ => unreachable!("Should be validated"),
