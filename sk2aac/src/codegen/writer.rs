@@ -25,35 +25,19 @@ impl<'a, W: Write> CodeWriter<'a, W> {
         }
     }
 
-    /// Extends current instance and indents.
-    pub fn indent(&mut self) -> CodeWriter<W> {
-        CodeWriter {
-            writer: self.writer,
-            indent_width: self.indent_width,
-            indent_spaces: format!("{}{}", self.indent_spaces, " ".repeat(self.indent_width)),
-            termination: None,
-        }
-    }
-
     /// Executes function with indented.
     pub fn with_indent<'f, T, F>(&'f mut self, f: F) -> Result<T, IoError>
     where
         F: FnOnce(CodeWriter<'f, W>) -> Result<T, IoError>,
     {
-        let inner = self.indent();
-        let returned = f(inner)?;
-        Ok(returned)
-    }
-
-    /// Extends current instance and indents with block.
-    pub fn indent_with_block(&mut self) -> Result<CodeWriter<W>, IoError> {
-        self.write("{")?;
-        Ok(CodeWriter {
+        let inner = CodeWriter {
             writer: self.writer,
             indent_width: self.indent_width,
             indent_spaces: format!("{}{}", self.indent_spaces, " ".repeat(self.indent_width)),
-            termination: Some(("}", true)),
-        })
+            termination: None,
+        };
+        let returned = f(inner)?;
+        Ok(returned)
     }
 
     /// Executes function with indented block.
@@ -61,20 +45,16 @@ impl<'a, W: Write> CodeWriter<'a, W> {
     where
         F: FnOnce(CodeWriter<'f, W>) -> Result<T, IoError>,
     {
-        let inner = self.indent_with_block()?;
-        let returned = f(inner)?;
-        Ok(returned)
-    }
+        self.write("{")?;
 
-    /// Extends current instance and wraps with ifdef.
-    pub fn wrap_ifdef(&mut self, identifier: &str) -> Result<CodeWriter<W>, IoError> {
-        self.write_head(format_args!("#ifdef {identifier}"))?;
-        Ok(CodeWriter {
+        let inner = CodeWriter {
             writer: self.writer,
             indent_width: self.indent_width,
-            indent_spaces: self.indent_spaces.clone(),
-            termination: Some(("#endif", false)),
-        })
+            indent_spaces: format!("{}{}", self.indent_spaces, " ".repeat(self.indent_width)),
+            termination: Some(("}", true)),
+        };
+        let returned = f(inner)?;
+        Ok(returned)
     }
 
     /// Executes function with ifdef.
@@ -82,7 +62,15 @@ impl<'a, W: Write> CodeWriter<'a, W> {
     where
         F: FnOnce(CodeWriter<'f, W>) -> Result<T, IoError>,
     {
-        let inner = self.wrap_ifdef(identifier)?;
+        write!(self.writer, "#if {identifier}")?;
+        writeln!(self.writer)?;
+
+        let inner = CodeWriter {
+            writer: self.writer,
+            indent_width: self.indent_width,
+            indent_spaces: self.indent_spaces.clone(),
+            termination: Some(("#endif", false)),
+        };
         let returned = f(inner)?;
         Ok(returned)
     }
@@ -94,15 +82,22 @@ impl<'a, W: Write> CodeWriter<'a, W> {
         Ok(())
     }
 
-    /// Writes a line without current indent.
-    pub fn write_head<D: Display>(&mut self, line: D) -> Result<(), IoError> {
-        write!(self.writer, "{line}")?;
+    /// Writes a blank line.
+    pub fn write_empty(&mut self) -> Result<(), IoError> {
         writeln!(self.writer)?;
         Ok(())
     }
 
-    /// Writes a blank line.
-    pub fn write_empty(&mut self) -> Result<(), IoError> {
+    /// Yields write process to given function.
+    pub fn write_yield<F>(&mut self, f: F) -> Result<(), IoError>
+    where
+        F: FnOnce(&mut W) -> Result<(), IoError>,
+    {
+        write!(self.writer, "{}", self.indent_spaces)?;
+        {
+            let yielded = &mut self.writer;
+            f(yielded)?;
+        }
         writeln!(self.writer)?;
         Ok(())
     }
@@ -115,7 +110,8 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                 let indent_space = &self.indent_spaces[..prev_indent];
                 write!(self.writer, "{indent_space}")?;
             }
-            self.write_head(text)?;
+            write!(self.writer, "{text}")?;
+            writeln!(self.writer)?;
             self.writer.flush()?;
             self.termination = None;
         }

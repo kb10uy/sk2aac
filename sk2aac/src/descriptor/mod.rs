@@ -132,7 +132,7 @@ impl ShapeKeySwitch {
             Some(v) => v,
             None => return Err(D::Error::custom("enabled_value out of range")),
         };
-        let disabled_value = match NormalizedF64::new(raw.disabled_value.unwrap_or(1.0)) {
+        let disabled_value = match NormalizedF64::new(raw.disabled_value.unwrap_or(0.0)) {
             Some(v) => v,
             None => return Err(D::Error::custom("disabled_value out of range")),
         };
@@ -217,13 +217,13 @@ impl<'de> Deserialize<'de> for ShapeKeyGroup {
 #[derive(Debug, Clone, Serialize)]
 pub struct ShapeKeyOption {
     /// Option label.
-    label: String,
+    pub label: String,
 
     /// Index value for Unity AnimatorController State.
-    index: Option<NonZeroUsize>,
+    pub index: Option<NonZeroUsize>,
 
     /// Shape keys to move.
-    shapes: Vec<ShapeKeyDrive>,
+    pub shapes: Vec<ShapeKeyDrive>,
 }
 
 impl ShapeKeyOption {
