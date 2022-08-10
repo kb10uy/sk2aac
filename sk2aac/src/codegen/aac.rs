@@ -105,9 +105,11 @@ impl AacObject for BehaviourClass {
                 cw.write(r#"// var fxDefault = aac.CreateMainFxLayer();"#)?;
 
                 for switch in descriptor.shape_switches {
+                    cw.write_empty()?;
                     ShapeKeySwitchBlock::new(switch).write_into(&mut cw)?;
                 }
                 for group in descriptor.shape_groups {
+                    cw.write_empty()?;
                     ShapeKeyGroupBlock::new(group).write_into(&mut cw)?;
                 }
                 Ok(())
@@ -129,7 +131,6 @@ impl AacObject for ShapeKeySwitchBlock {
     fn write_into<W: Write>(self, w: &mut CodeWriter<W>) -> IoResult<()> {
         let switch = self.0;
 
-        w.write_empty()?;
         w.write(format_args!(
             r#"// Shape Key Switch "{}""#,
             switch.common.name
@@ -197,7 +198,6 @@ impl AacObject for ShapeKeyGroupBlock {
             (n, value)
         });
 
-        w.write_empty()?;
         w.write(format_args!(
             r#"// Shape Key Switch "{}""#,
             group.common.name
