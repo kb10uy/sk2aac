@@ -181,6 +181,7 @@ where
 
             StateDefinition::new("disabled", "0: Disabled")
                 .blend_shapes(&default_drives)
+                .indented()
                 .write_into(&mut b)?;
 
             // TODO: Check id duplicate

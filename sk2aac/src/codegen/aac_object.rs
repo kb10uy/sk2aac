@@ -63,6 +63,7 @@ pub struct StateDefinition<'a> {
     blend_shapes: &'a [(&'a str, f64)],
     renderer: &'a str,
     right_of: Option<String>,
+    indented: bool,
 }
 
 impl<'a> StateDefinition<'a> {
@@ -73,6 +74,7 @@ impl<'a> StateDefinition<'a> {
             blend_shapes: &[],
             renderer: "renderer",
             right_of: None,
+            indented: false,
         }
     }
 
@@ -83,6 +85,11 @@ impl<'a> StateDefinition<'a> {
 
     pub fn blend_shapes(mut self, items: &'a [(&'a str, f64)]) -> Self {
         self.blend_shapes = items;
+        self
+    }
+
+    pub fn indented(mut self) -> Self {
+        self.indented = true;
         self
     }
 }
@@ -96,17 +103,41 @@ impl<'a> AacObject for StateDefinition<'a> {
             ..
         } = &self;
 
-        w.write_yield(|w| {
-            write!(w, r#"var {state_var} = layer.NewState("{state_name}")"#)?;
-            if let Some(ro) = &self.right_of {
-                write!(w, r#".RightOf({ro})"#)?;
-            }
-            write!(w, r#".WithAnimation(aac.NewClip()"#)?;
-            for (name, value) in self.blend_shapes {
-                write!(w, r#".BlendShape({renderer}, "{name}", {value:.1}f)"#)?;
-            }
-            write!(w, r#");"#)
-        })
+        if self.indented {
+            w.write_yield(|w| {
+                write!(w, r#"var {state_var} = layer.NewState("{state_name}")"#)?;
+                if let Some(ro) = &self.right_of {
+                    write!(w, r#".RightOf({ro})"#)?;
+                }
+                write!(w, r#".WithAnimation("#)
+            })?;
+
+            w.with_indent(|mut b| {
+                b.write(r#"aac.NewClip()"#)?;
+                b.with_indent(|mut b| {
+                    for (name, value) in self.blend_shapes {
+                        b.write(format_args!(
+                            r#".BlendShape({renderer}, "{name}", {value:.1}f)"#
+                        ))?;
+                    }
+                    Ok(())
+                })
+            })?;
+
+            w.write(r#");"#)
+        } else {
+            w.write_yield(|w| {
+                write!(w, r#"var {state_var} = layer.NewState("{state_name}")"#)?;
+                if let Some(ro) = &self.right_of {
+                    write!(w, r#".RightOf({ro})"#)?;
+                }
+                write!(w, r#".WithAnimation(aac.NewClip()"#)?;
+                for (name, value) in self.blend_shapes {
+                    write!(w, r#".BlendShape({renderer}, "{name}", {value:.1}f)"#)?;
+                }
+                write!(w, r#");"#)
+            })
+        }
     }
 }
 

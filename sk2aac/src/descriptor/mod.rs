@@ -255,11 +255,13 @@ impl ShapeKeyOption {
                     }
                     None => None,
                 };
-                let shapes = shapes
-                    .into_iter()
-                    .flatten()
-                    .map(|s| ShapeKeyDrive::from_raw::<'de, D>(s, default_value))
-                    .collect::<Result<_, _>>()?;
+                let shapes = match shapes {
+                    Some(sv) => sv
+                        .into_iter()
+                        .map(|s| ShapeKeyDrive::from_raw::<'de, D>(s, default_value))
+                        .collect::<Result<_, _>>()?,
+                    None => vec![ShapeKeyDrive::new(&label)],
+                };
 
                 ShapeKeyOption {
                     label,
