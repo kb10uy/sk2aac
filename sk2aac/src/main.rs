@@ -1,5 +1,4 @@
 mod codegen;
-mod data;
 mod descriptor;
 
 use crate::{codegen::AacCodeGenerator, descriptor::Descriptor};
