@@ -1,7 +1,7 @@
 mod codegen;
 mod descriptor;
 
-use crate::{codegen::AacCodeGenerator, descriptor::Descriptor};
+use crate::{codegen::write_descriptor_code, descriptor::Descriptor};
 
 use std::{
     env::args,
@@ -22,9 +22,9 @@ fn main() -> Result<()> {
 
     let descriptor: Descriptor = toml_from_str(&read_to_string(&args[1])?)?;
     let mut output_file = BufWriter::new(File::create(&args[2])?);
-    let mut acg = AacCodeGenerator::new(&mut output_file, &descriptor.name)?;
-    acg.emit_code(descriptor)?;
-    println!("You should rename the file to {}.cs", acg.class_name());
+
+    let class_name = write_descriptor_code(&mut output_file, descriptor)?;
+    println!("You should rename the file to {class_name}.cs");
 
     Ok(())
 }

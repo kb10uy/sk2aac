@@ -1,5 +1,4 @@
 mod aac;
-mod aac_object;
 mod writer;
 
-pub use self::{aac::AacCodeGenerator, aac_object::AacObject, writer::CodeWriter};
+pub use self::{aac::write_descriptor_code, writer::CodeWriter};
