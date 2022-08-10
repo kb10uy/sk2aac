@@ -20,9 +20,8 @@ fn main() -> Result<()> {
     if args.len() <= 2 {
         bail!("Usage: sk2aac <descriptor TOML> <output cs>");
     }
-    let descriptor: Descriptor = toml_from_str(&read_to_string(&args[1])?)?;
-    println!("{descriptor:?}");
 
+    let descriptor: Descriptor = toml_from_str(&read_to_string(&args[1])?)?;
     let mut output_file = BufWriter::new(File::create(&args[2])?);
     let mut acg = AacCodeGenerator::new(&mut output_file, &descriptor.name)?;
     acg.emit_code(&descriptor)?;
