@@ -29,6 +29,23 @@ trait AacObject {
     fn write_into<W: Write>(self, w: &mut CodeWriter<W>) -> IoResult<()>;
 }
 
+/// Tracking layer.
+#[derive(Debug, Clone, Copy)]
+enum AnimationTarget {
+    Eyelids,
+    JawAndMouth,
+}
+
+impl AnimationTarget {
+    fn tracking_element(&self) -> &str {
+        match self {
+            AnimationTarget::Eyelids => "TrackingElement.Eyes",
+            AnimationTarget::JawAndMouth => "TrackingElement.Mouth",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 struct Preamble;
 
 impl AacObject for Preamble {
@@ -45,6 +62,7 @@ impl AacObject for Preamble {
 }
 
 /// `public class <AvatarName>_Editor...`
+#[derive(Debug, Clone)]
 struct CustomEditorClass(String);
 
 impl CustomEditorClass {
@@ -75,6 +93,7 @@ impl AacObject for CustomEditorClass {
 }
 
 /// `public class <AvatarName>`
+#[derive(Debug, Clone)]
 struct BehaviourClass {
     class_name: String,
     descriptor: Descriptor,
@@ -104,6 +123,48 @@ impl AacObject for BehaviourClass {
                 cw.write(r#"var aac = AacExample.AnimatorAsCode("SK2AAC {avatar_name}", avatarDescriptor, TargetContainer, AssetKey, AacExample.Options().WriteDefaultsOff());"#)?;
                 cw.write(r#"// var fxDefault = aac.CreateMainFxLayer();"#)?;
 
+                let eyelids_preventions = descriptor
+                    .shape_groups
+                    .iter()
+                    .filter_map(|g| {
+                        if g.common.prevent_eyelids {
+                            Some(ParameterType::Integer(g.common.name.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .chain(descriptor.shape_switches.iter().filter_map(|g| {
+                        if g.common.prevent_eyelids {
+                            Some(ParameterType::Bool(g.common.name.clone()))
+                        } else {
+                            None
+                        }
+                    }));
+                cw.write_empty()?;
+                PreventionLayer::new(AnimationTarget::Eyelids, eyelids_preventions)
+                    .write_into(&mut cw)?;
+
+                let mouth_preventions = descriptor
+                    .shape_groups
+                    .iter()
+                    .filter_map(|g| {
+                        if g.common.prevent_mouth {
+                            Some(ParameterType::Integer(g.common.name.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .chain(descriptor.shape_switches.iter().filter_map(|g| {
+                        if g.common.prevent_mouth {
+                            Some(ParameterType::Bool(g.common.name.clone()))
+                        } else {
+                            None
+                        }
+                    }));
+                cw.write_empty()?;
+                PreventionLayer::new(AnimationTarget::Eyelids, mouth_preventions)
+                    .write_into(&mut cw)?;
+
                 for switch in descriptor.shape_switches {
                     cw.write_empty()?;
                     ShapeKeySwitchBlock::new(switch).write_into(&mut cw)?;
@@ -119,6 +180,7 @@ impl AacObject for BehaviourClass {
 }
 
 /// `Blocks default animation...`
+#[derive(Debug, Clone)]
 struct PreventionLayer {
     target: AnimationTarget,
     params: Vec<ParameterType>,
@@ -138,45 +200,69 @@ impl PreventionLayer {
 
 impl AacObject for PreventionLayer {
     fn write_into<W: Write>(self, w: &mut CodeWriter<W>) -> IoResult<()> {
+        let animated_condition = Cond::Or(
+            self.params
+                .iter()
+                .filter_map(|p| match p {
+                    ParameterType::Bool(p) => Some(Cond::Term(Expr::IsTrue(format!("param{p}")))),
+                    ParameterType::Integer(p) => {
+                        Some(Cond::Term(Expr::IntNotEqual(format!("param{p}"), 0)))
+                    }
+                    _ => None,
+                })
+                .collect(),
+        );
+        let tracking_condition = Cond::And(
+            self.params
+                .iter()
+                .filter_map(|p| match p {
+                    ParameterType::Bool(p) => Some(Cond::Term(Expr::IsFalse(format!("param{p}")))),
+                    ParameterType::Integer(p) => {
+                        Some(Cond::Term(Expr::IntEqual(format!("param{p}"), 0)))
+                    }
+                    _ => None,
+                })
+                .collect(),
+        );
+
         w.write(format_args!(r#"// Prevents Animation"#))?;
         w.with_block(|mut b| {
+            for param in self.params {
+                let var_name = match &param {
+                    ParameterType::Bool(p) => format!("param{p}"),
+                    ParameterType::Integer(p) => format!("param{p}"),
+                    _ => continue,
+                };
+                ParameterDefinition::new(param)
+                    .var_name(var_name)
+                    .write_into(&mut b)?;
+            }
             b.write_empty()?;
 
             // States
             StateDefinition::new("tracking", "Tracking").write_into(&mut b)?;
+            StateOptions::new("tracking")
+                .tracks(self.target)
+                .write_into(&mut b)?;
             StateDefinition::new("animated", "Animated").write_into(&mut b)?;
+            StateOptions::new("animated")
+                .animates(self.target)
+                .write_into(&mut b)?;
             b.write_empty()?;
 
             // Transitions
-            Transition::new("disabled", "enabled")
-                .cond(Cond::Term(Expr::IsTrue(
-                    ParameterDefinition::DEFAULT_VARNAME.into(),
-                )))
+            Transition::new("tracking", "animated")
+                .cond(animated_condition)
                 .write_into(&mut b)?;
-            Transition::new("enabled", "disabled")
-                .cond(Cond::Term(Expr::IsFalse(
-                    ParameterDefinition::DEFAULT_VARNAME.into(),
-                )))
+            Transition::new("animated", "tracking")
+                .cond(tracking_condition)
                 .write_into(&mut b)
         })
     }
 }
 
-enum AnimationTarget {
-    Eyelids,
-    JawAndMouth,
-}
-
-impl AnimationTarget {
-    fn tracking_element(&self) -> &str {
-        match self {
-            AnimationTarget::Eyelids => "TrackingElement.Eyes",
-            AnimationTarget::JawAndMouth => "TrackingElement.Mouth",
-        }
-    }
-}
-
 /// `// Shape Key Switch ...`
+#[derive(Debug, Clone)]
 struct ShapeKeySwitchBlock(ShapeKeySwitch);
 
 impl ShapeKeySwitchBlock {
@@ -223,6 +309,7 @@ impl AacObject for ShapeKeySwitchBlock {
 }
 
 /// `// Shape Key Group ...`
+#[derive(Debug, Clone)]
 struct ShapeKeyGroupBlock(ShapeKeyGroup);
 
 impl ShapeKeyGroupBlock {
@@ -310,6 +397,7 @@ impl AacObject for ShapeKeyGroupBlock {
 }
 
 /// `var renderer = ...`
+#[derive(Debug, Clone)]
 struct RendererFetch(String);
 
 impl RendererFetch {
@@ -332,6 +420,7 @@ impl AacObject for RendererFetch {
 }
 
 /// `var parameter = ...`
+#[derive(Debug, Clone)]
 struct ParameterDefinition {
     var_name: String,
     param_type: ParameterType,
@@ -339,6 +428,18 @@ struct ParameterDefinition {
 
 impl ParameterDefinition {
     const DEFAULT_VARNAME: &'static str = "parameter";
+
+    fn new(param_type: ParameterType) -> ParameterDefinition {
+        ParameterDefinition {
+            var_name: Self::DEFAULT_VARNAME.into(),
+            param_type,
+        }
+    }
+
+    fn var_name(mut self, var_name: impl Into<String>) -> ParameterDefinition {
+        self.var_name = var_name.into();
+        self
+    }
 
     fn integer(name: impl Into<String>) -> ParameterDefinition {
         ParameterDefinition {
@@ -399,6 +500,7 @@ impl AacObject for ParameterDefinition {
     }
 }
 
+#[derive(Debug, Clone)]
 enum ParameterType {
     Bool(String),
     Integer(String),
@@ -407,6 +509,7 @@ enum ParameterType {
 }
 
 /// `var state = ...`
+#[derive(Debug, Clone)]
 struct StateDefinition {
     state_var: String,
     state_name: String,
@@ -497,6 +600,7 @@ impl AacObject for StateDefinition {
 }
 
 /// `state.Tracks/Animates()...`
+#[derive(Debug, Clone)]
 struct StateOptions {
     state_var: String,
     options: Vec<StateOption>,
@@ -508,6 +612,16 @@ impl StateOptions {
             state_var: state_var.into(),
             options: vec![],
         }
+    }
+
+    fn tracks(mut self, target: AnimationTarget) -> Self {
+        self.options.push(StateOption::Tracks(target));
+        self
+    }
+
+    fn animates(mut self, target: AnimationTarget) -> Self {
+        self.options.push(StateOption::Animates(target));
+        self
     }
 }
 
@@ -535,12 +649,14 @@ impl AacObject for StateOptions {
     }
 }
 
+#[derive(Debug, Clone)]
 enum StateOption {
     Tracks(AnimationTarget),
     Animates(AnimationTarget),
 }
 
 /// `state.TransitionTo()...`
+#[derive(Debug, Clone)]
 struct Transition {
     from: Option<String>,
     to: Option<String>,
@@ -591,6 +707,7 @@ impl AacObject for Transition {
     }
 }
 
+#[derive(Debug, Clone)]
 enum Expr {
     IntEqual(String, usize),
     IntNotEqual(String, usize),
@@ -609,6 +726,7 @@ impl Expr {
     }
 }
 
+#[derive(Debug, Clone)]
 enum Cond {
     Or(Vec<Cond>),
     And(Vec<Cond>),
@@ -627,6 +745,7 @@ impl Cond {
     fn is_valid_and(&self) -> bool {
         match self {
             Cond::And(terms) => terms.iter().all(|t| matches!(t, Cond::Term(_))),
+            Cond::Term(_) => true,
             _ => false,
         }
     }
