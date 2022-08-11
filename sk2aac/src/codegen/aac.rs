@@ -13,11 +13,10 @@ use std::{
 pub fn write_descriptor_code<W: Write>(writer: &mut W, descriptor: Descriptor) -> IoResult<String> {
     let mut writer = CodeWriter::new(writer, 4);
     let class_name = format!("SK2AACGenerator_{}", descriptor.name);
-    let editor_class_name = format!("SK2AACGenerator_{}_Editor", descriptor.name);
 
     Preamble.write_into(&mut writer)?;
     writer.write_empty()?;
-    CustomEditorClass::new(editor_class_name).write_into(&mut writer)?;
+    CustomEditorClass::new(class_name.clone()).write_into(&mut writer)?;
     writer.write_empty()?;
     BehaviourClass::new(class_name.clone(), descriptor).write_into(&mut writer)?;
 
@@ -43,6 +42,13 @@ impl AnimationTarget {
             AnimationTarget::JawAndMouth => "TrackingElement.Mouth",
         }
     }
+
+    fn displayed_name(&self) -> &str {
+        match self {
+            AnimationTarget::Eyelids => "Eyes",
+            AnimationTarget::JawAndMouth => "Mouth",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -56,6 +62,7 @@ impl AacObject for Preamble {
             cw.write(r#"using UnityEditor;"#)?;
             cw.write(r#"using UnityEditor.Animations;"#)?;
             cw.write(r#"using VRC.SDK3.Avatars.Components;"#)?;
+            cw.write(r#"using static AnimatorAsCode.V0.AacFlState;"#)?;
             cw.write(r#"using AnimatorAsCodeFramework.Examples;"#)
         })
     }
@@ -76,7 +83,7 @@ impl AacObject for CustomEditorClass {
         let class_name = self.0;
 
         w.with_ifdef("UNITY_EDITOR", |mut ce| {
-            ce.write(format_args!(r#"public class {class_name} : Editor"#))?;
+            ce.write(format_args!(r#"public class {class_name}_Editor : Editor"#))?;
             ce.with_block(|mut ce| {
                 ce.write(r#"public override void OnInspectorGUI()"#)?;
                 ce.with_block(|mut ce| {
@@ -120,7 +127,7 @@ impl AacObject for BehaviourClass {
             cw.write(r#"public void GenerateAnimator()"#)?;
             cw.with_block(|mut cw| {
                 cw.write(r#"var avatarDescriptor = GetComponent<VRCAvatarDescriptor>();"#)?;
-                cw.write(r#"var aac = AacExample.AnimatorAsCode("SK2AAC {avatar_name}", avatarDescriptor, TargetContainer, AssetKey, AacExample.Options().WriteDefaultsOff());"#)?;
+                cw.write(r#"var aac = AacExample.AnimatorAsCode("SK2AAC", avatarDescriptor, TargetContainer, AssetKey, AacExample.Options().WriteDefaultsOff());"#)?;
                 cw.write(r#"// var fxDefault = aac.CreateMainFxLayer();"#)?;
 
                 let eyelids_preventions = descriptor
@@ -162,16 +169,16 @@ impl AacObject for BehaviourClass {
                         }
                     }));
                 cw.write_empty()?;
-                PreventionLayer::new(AnimationTarget::Eyelids, mouth_preventions)
+                PreventionLayer::new(AnimationTarget::JawAndMouth, mouth_preventions)
                     .write_into(&mut cw)?;
 
                 for switch in descriptor.shape_switches {
                     cw.write_empty()?;
-                    ShapeKeySwitchBlock::new(switch).write_into(&mut cw)?;
+                    ShapeKeySwitchLayer::new(switch).write_into(&mut cw)?;
                 }
                 for group in descriptor.shape_groups {
                     cw.write_empty()?;
-                    ShapeKeyGroupBlock::new(group).write_into(&mut cw)?;
+                    ShapeKeyGroupLayer::new(group).write_into(&mut cw)?;
                 }
                 Ok(())
             })
@@ -200,6 +207,10 @@ impl PreventionLayer {
 
 impl AacObject for PreventionLayer {
     fn write_into<W: Write>(self, w: &mut CodeWriter<W>) -> IoResult<()> {
+        if self.params.is_empty() {
+            return Ok(());
+        }
+
         let animated_condition = Cond::Or(
             self.params
                 .iter()
@@ -227,6 +238,9 @@ impl AacObject for PreventionLayer {
 
         w.write(format_args!(r#"// Prevents Animation"#))?;
         w.with_block(|mut b| {
+            LayerDefinition::new(format!("{}_TrackingControl", self.target.displayed_name()))
+                .write_into(&mut b)?;
+
             for param in self.params {
                 let var_name = match &param {
                     ParameterType::Bool(p) => format!("param{p}"),
@@ -263,15 +277,15 @@ impl AacObject for PreventionLayer {
 
 /// `// Shape Key Switch ...`
 #[derive(Debug, Clone)]
-struct ShapeKeySwitchBlock(ShapeKeySwitch);
+struct ShapeKeySwitchLayer(ShapeKeySwitch);
 
-impl ShapeKeySwitchBlock {
+impl ShapeKeySwitchLayer {
     fn new(switch: ShapeKeySwitch) -> Self {
-        ShapeKeySwitchBlock(switch)
+        ShapeKeySwitchLayer(switch)
     }
 }
 
-impl AacObject for ShapeKeySwitchBlock {
+impl AacObject for ShapeKeySwitchLayer {
     fn write_into<W: Write>(self, w: &mut CodeWriter<W>) -> IoResult<()> {
         let switch = self.0;
 
@@ -280,6 +294,7 @@ impl AacObject for ShapeKeySwitchBlock {
             switch.common.name
         ))?;
         w.with_block(|mut b| {
+            LayerDefinition::new(format!("{}", switch.common.name)).write_into(&mut b)?;
             RendererFetch::new(switch.common.mesh).write_into(&mut b)?;
             ParameterDefinition::bool(switch.common.name).write_into(&mut b)?;
             b.write_empty()?;
@@ -310,17 +325,17 @@ impl AacObject for ShapeKeySwitchBlock {
 
 /// `// Shape Key Group ...`
 #[derive(Debug, Clone)]
-struct ShapeKeyGroupBlock(ShapeKeyGroup);
+struct ShapeKeyGroupLayer(ShapeKeyGroup);
 
-impl ShapeKeyGroupBlock {
+impl ShapeKeyGroupLayer {
     const ALIGN_UNIT: usize = 8;
 
     fn new(group: ShapeKeyGroup) -> Self {
-        ShapeKeyGroupBlock(group)
+        ShapeKeyGroupLayer(group)
     }
 }
 
-impl AacObject for ShapeKeyGroupBlock {
+impl AacObject for ShapeKeyGroupLayer {
     fn write_into<W: Write>(self, w: &mut CodeWriter<W>) -> IoResult<()> {
         let group = self.0;
 
@@ -348,6 +363,7 @@ impl AacObject for ShapeKeyGroupBlock {
             group.common.name
         ))?;
         w.with_block(|mut b| {
+            LayerDefinition::new(format!("{}", group.common.name)).write_into(&mut b)?;
             RendererFetch::new(group.common.mesh).write_into(&mut b)?;
             ParameterDefinition::integer(group.common.name).write_into(&mut b)?;
             b.write_empty()?;
@@ -392,6 +408,29 @@ impl AacObject for ShapeKeyGroupBlock {
                     .write_into(&mut b)?;
             }
             Ok(())
+        })
+    }
+}
+
+/// `var layer = ...`
+#[derive(Debug, Clone)]
+struct LayerDefinition(String);
+
+impl LayerDefinition {
+    fn new(name: impl Into<String>) -> Self {
+        LayerDefinition(name.into())
+    }
+}
+
+impl AacObject for LayerDefinition {
+    fn write_into<W: Write>(self, w: &mut CodeWriter<W>) -> IoResult<()> {
+        let layer_name = self.0;
+
+        w.write_yield(|w| {
+            write!(
+                w,
+                r#"var layer = aac.CreateSupportingFxLayer("{layer_name}");"#
+            )
         })
     }
 }
