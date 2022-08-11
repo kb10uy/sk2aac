@@ -118,6 +118,64 @@ impl AacObject for BehaviourClass {
     }
 }
 
+/// `Blocks default animation...`
+struct PreventionLayer {
+    target: AnimationTarget,
+    params: Vec<ParameterType>,
+}
+
+impl PreventionLayer {
+    fn new(
+        target: AnimationTarget,
+        params: impl IntoIterator<Item = ParameterType>,
+    ) -> PreventionLayer {
+        PreventionLayer {
+            target,
+            params: params.into_iter().collect(),
+        }
+    }
+}
+
+impl AacObject for PreventionLayer {
+    fn write_into<W: Write>(self, w: &mut CodeWriter<W>) -> IoResult<()> {
+        w.write(format_args!(r#"// Prevents Animation"#))?;
+        w.with_block(|mut b| {
+            b.write_empty()?;
+
+            // States
+            StateDefinition::new("tracking", "Tracking").write_into(&mut b)?;
+            StateDefinition::new("animated", "Animated").write_into(&mut b)?;
+            b.write_empty()?;
+
+            // Transitions
+            Transition::new("disabled", "enabled")
+                .cond(Cond::Term(Expr::IsTrue(
+                    ParameterDefinition::DEFAULT_VARNAME.into(),
+                )))
+                .write_into(&mut b)?;
+            Transition::new("enabled", "disabled")
+                .cond(Cond::Term(Expr::IsFalse(
+                    ParameterDefinition::DEFAULT_VARNAME.into(),
+                )))
+                .write_into(&mut b)
+        })
+    }
+}
+
+enum AnimationTarget {
+    Eyelids,
+    JawAndMouth,
+}
+
+impl AnimationTarget {
+    fn tracking_element(&self) -> &str {
+        match self {
+            AnimationTarget::Eyelids => "TrackingElement.Eyes",
+            AnimationTarget::JawAndMouth => "TrackingElement.Mouth",
+        }
+    }
+}
+
 /// `// Shape Key Switch ...`
 struct ShapeKeySwitchBlock(ShapeKeySwitch);
 
@@ -137,7 +195,7 @@ impl AacObject for ShapeKeySwitchBlock {
         ))?;
         w.with_block(|mut b| {
             RendererFetch::new(switch.common.mesh).write_into(&mut b)?;
-            ParameterDefinition::Bool(switch.common.name).write_into(&mut b)?;
+            ParameterDefinition::bool(switch.common.name).write_into(&mut b)?;
             b.write_empty()?;
 
             // States
@@ -152,12 +210,12 @@ impl AacObject for ShapeKeySwitchBlock {
             // Transitions
             Transition::new("disabled", "enabled")
                 .cond(Cond::Term(Expr::IsTrue(
-                    ParameterDefinition::PARAMETER_VARNAME.into(),
+                    ParameterDefinition::DEFAULT_VARNAME.into(),
                 )))
                 .write_into(&mut b)?;
             Transition::new("enabled", "disabled")
                 .cond(Cond::Term(Expr::IsFalse(
-                    ParameterDefinition::PARAMETER_VARNAME.into(),
+                    ParameterDefinition::DEFAULT_VARNAME.into(),
                 )))
                 .write_into(&mut b)
         })
@@ -204,7 +262,7 @@ impl AacObject for ShapeKeyGroupBlock {
         ))?;
         w.with_block(|mut b| {
             RendererFetch::new(group.common.mesh).write_into(&mut b)?;
-            ParameterDefinition::Integer(group.common.name).write_into(&mut b)?;
+            ParameterDefinition::integer(group.common.name).write_into(&mut b)?;
             b.write_empty()?;
 
             StateDefinition::new("disabled", "0: Disabled")
@@ -235,13 +293,13 @@ impl AacObject for ShapeKeyGroupBlock {
                 // Transitions
                 Transition::new("disabled", state_name.clone())
                     .cond(Cond::Term(Expr::IntEqual(
-                        ParameterDefinition::PARAMETER_VARNAME.into(),
+                        ParameterDefinition::DEFAULT_VARNAME.into(),
                         index,
                     )))
                     .write_into(&mut b)?;
                 Transition::exits(state_name.clone())
                     .cond(Cond::Term(Expr::IntNotEqual(
-                        ParameterDefinition::PARAMETER_VARNAME.into(),
+                        ParameterDefinition::DEFAULT_VARNAME.into(),
                         index,
                     )))
                     .write_into(&mut b)?;
@@ -274,27 +332,78 @@ impl AacObject for RendererFetch {
 }
 
 /// `var parameter = ...`
-enum ParameterDefinition {
-    Bool(String),
-    Integer(String),
+struct ParameterDefinition {
+    var_name: String,
+    param_type: ParameterType,
 }
 
 impl ParameterDefinition {
-    const PARAMETER_VARNAME: &'static str = "parameter";
+    const DEFAULT_VARNAME: &'static str = "parameter";
+
+    fn integer(name: impl Into<String>) -> ParameterDefinition {
+        ParameterDefinition {
+            var_name: Self::DEFAULT_VARNAME.into(),
+            param_type: ParameterType::Integer(name.into()),
+        }
+    }
+
+    fn bool(name: impl Into<String>) -> ParameterDefinition {
+        ParameterDefinition {
+            var_name: Self::DEFAULT_VARNAME.into(),
+            param_type: ParameterType::Bool(name.into()),
+        }
+    }
+
+    fn integer_group(names: impl IntoIterator<Item = String>) -> ParameterDefinition {
+        ParameterDefinition {
+            var_name: Self::DEFAULT_VARNAME.into(),
+            param_type: ParameterType::IntegerGroup(names.into_iter().collect()),
+        }
+    }
+
+    fn bool_group(names: impl IntoIterator<Item = String>) -> ParameterDefinition {
+        ParameterDefinition {
+            var_name: Self::DEFAULT_VARNAME.into(),
+            param_type: ParameterType::BoolGroup(names.into_iter().collect()),
+        }
+    }
 }
 
 impl AacObject for ParameterDefinition {
     fn write_into<W: Write>(self, w: &mut CodeWriter<W>) -> IoResult<()> {
-        let param_name = Self::PARAMETER_VARNAME;
-        match self {
-            ParameterDefinition::Bool(p) => w.write(format_args!(
-                r#"var {param_name} = layer.BoolParameter("{p}");"#
+        let ParameterDefinition {
+            var_name,
+            param_type,
+        } = self;
+
+        match param_type {
+            ParameterType::Bool(p) => w.write(format_args!(
+                r#"var {var_name} = layer.BoolParameter("{p}");"#
             )),
-            ParameterDefinition::Integer(p) => w.write(format_args!(
-                r#"var {param_name} = layer.IntParameter("{p}");"#
+            ParameterType::Integer(p) => w.write(format_args!(
+                r#"var {var_name} = layer.IntParameter("{p}");"#
             )),
+            ParameterType::BoolGroup(ps) => {
+                let joined = ps.join(r#"", ""#);
+                w.write(format_args!(
+                    r#"var {var_name} = layer.BoolParameters("{joined}");"#
+                ))
+            }
+            ParameterType::IntegerGroup(ps) => {
+                let joined = ps.join(r#"", ""#);
+                w.write(format_args!(
+                    r#"var {var_name} = layer.IntParameters("{joined}");"#
+                ))
+            }
         }
     }
+}
+
+enum ParameterType {
+    Bool(String),
+    Integer(String),
+    BoolGroup(Vec<String>),
+    IntegerGroup(Vec<String>),
 }
 
 /// `var state = ...`
@@ -324,13 +433,13 @@ impl StateDefinition {
         self
     }
 
-    fn blend_shapes(mut self, items: impl IntoIterator<Item = (String, f64)>) -> Self {
-        self.blend_shapes = Some(items.into_iter().collect());
+    fn indented(mut self) -> Self {
+        self.indented = true;
         self
     }
 
-    fn indented(mut self) -> Self {
-        self.indented = true;
+    fn blend_shapes(mut self, items: impl IntoIterator<Item = (String, f64)>) -> Self {
+        self.blend_shapes = Some(items.into_iter().collect());
         self
     }
 }
@@ -385,6 +494,50 @@ impl AacObject for StateDefinition {
             })
         }
     }
+}
+
+/// `state.Tracks/Animates()...`
+struct StateOptions {
+    state_var: String,
+    options: Vec<StateOption>,
+}
+
+impl StateOptions {
+    fn new(state_var: impl Into<String>) -> StateOptions {
+        StateOptions {
+            state_var: state_var.into(),
+            options: vec![],
+        }
+    }
+}
+
+impl AacObject for StateOptions {
+    fn write_into<W: Write>(self, w: &mut CodeWriter<W>) -> IoResult<()> {
+        if self.options.is_empty() {
+            return Ok(());
+        }
+
+        let StateOptions { state_var, options } = self;
+        w.write_yield(|w| {
+            write!(w, r#"{state_var}"#)?;
+            for option in options {
+                match option {
+                    StateOption::Tracks(at) => {
+                        write!(w, r#".TrackingTracks({})"#, at.tracking_element())?
+                    }
+                    StateOption::Animates(at) => {
+                        write!(w, r#".TrackingAnimates({})"#, at.tracking_element())?
+                    }
+                }
+            }
+            write!(w, r#";"#)
+        })
+    }
+}
+
+enum StateOption {
+    Tracks(AnimationTarget),
+    Animates(AnimationTarget),
 }
 
 /// `state.TransitionTo()...`
