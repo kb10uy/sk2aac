@@ -25,7 +25,6 @@ class ShapeKeyExporter(bpy.types.Operator):
         toml_string += "name = \"AvatarName\"\n"
         toml_string += "\n"
 
-        animation_objects = []
         for selected_object in bpy.context.selected_objects:
             if selected_object.type != "MESH":
                 self.report(
