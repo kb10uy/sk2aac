@@ -1,13 +1,43 @@
 mod raw;
+mod validation;
+
+pub use self::validation::{validate_descriptor, ValidationError, ValidationResult};
 
 use crate::descriptor::raw::{
-    RawDescriptor, RawShapeKeyCommon, RawShapeKeyDrive, RawShapeKeyGroup, RawShapeKeyOption,
-    RawShapeKeySwitch,
+    RawDescriptor, RawDrive, RawDriver, RawDriverOption, RawShapeKeyCommon, RawShapeKeyDrive,
+    RawShapeKeyGroup, RawShapeKeyOption, RawShapeKeySwitch,
 };
 
 use std::num::NonZeroUsize;
 
 use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+
+/// Normalized float value in [0, 1].
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct NormalizedF64(pub f64);
+
+impl NormalizedF64 {
+    pub fn new(v: f64) -> Option<NormalizedF64> {
+        if v >= 0.0 && v <= 1.0 {
+            Some(NormalizedF64(v as f64))
+        } else {
+            None
+        }
+    }
+
+    pub const fn get(&self) -> f64 {
+        self.0
+    }
+}
+
+impl Serialize for NormalizedF64 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_f64(self.0)
+    }
+}
 
 /// Represents a whole descriptor object.
 #[derive(Debug, Clone, Serialize)]
@@ -20,6 +50,9 @@ pub struct Descriptor {
 
     /// Shape key groups.
     pub shape_groups: Vec<ShapeKeyGroup>,
+
+    /// Parameter driver layers.
+    pub drivers: Vec<Driver>,
 }
 
 impl Descriptor {
@@ -39,11 +72,18 @@ impl Descriptor {
             .flatten()
             .map(|s| ShapeKeyGroup::from_raw::<'de, D>(s))
             .collect::<Result<_, _>>()?;
+        let drivers = raw
+            .drivers
+            .into_iter()
+            .flatten()
+            .map(|s| Driver::from_raw::<'de, D>(s))
+            .collect::<Result<_, _>>()?;
 
         Ok(Descriptor {
             name: raw.name,
             shape_switches,
             shape_groups,
+            drivers,
         })
     }
 }
@@ -351,29 +391,195 @@ impl<'de> Deserialize<'de> for ShapeKeyDrive {
     }
 }
 
-/// Normalized float value in [0, 1].
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct NormalizedF64(pub f64);
+/// Represents a parameter driver layer.
+#[derive(Debug, Clone, Serialize)]
+pub struct Driver {
+    /// Layer name.
+    pub name: String,
 
-impl NormalizedF64 {
-    pub fn new(v: f64) -> Option<NormalizedF64> {
-        if v >= 0.0 && v <= 1.0 {
-            Some(NormalizedF64(v as f64))
-        } else {
-            None
-        }
-    }
+    /// Driver options.
+    pub options: Vec<DriverOption>,
+}
 
-    pub const fn get(&self) -> f64 {
-        self.0
+impl Driver {
+    fn from_raw<'de, D>(raw: RawDriver) -> Result<Driver, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let options = raw
+            .options
+            .into_iter()
+            .map(|o| DriverOption::from_raw::<'de, D>(o))
+            .collect::<Result<_, _>>()?;
+        Ok(Driver {
+            name: raw.name,
+            options,
+        })
     }
 }
 
-impl Serialize for NormalizedF64 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+impl<'de> Deserialize<'de> for Driver {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        S: Serializer,
+        D: Deserializer<'de>,
     {
-        serializer.serialize_f64(self.0)
+        let raw = RawDriver::deserialize(deserializer)?;
+        Driver::from_raw::<'de, D>(raw)
+    }
+}
+
+/// An option of Driver.
+#[derive(Debug, Clone, Serialize)]
+pub struct DriverOption {
+    /// Option label.
+    pub label: String,
+    pub drives: Vec<Drive>,
+}
+
+impl DriverOption {
+    fn from_raw<'de, D>(raw: RawDriverOption) -> Result<DriverOption, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let drives = raw
+            .drives
+            .into_iter()
+            .map(|o| Drive::from_raw::<'de, D>(o))
+            .collect::<Result<_, _>>()?;
+        let option = DriverOption {
+            label: raw.label,
+            drives,
+        };
+        Ok(option)
+    }
+}
+
+impl<'de> Deserialize<'de> for DriverOption {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawDriverOption::deserialize(deserializer)?;
+        DriverOption::from_raw::<'de, D>(raw)
+    }
+}
+
+/// A single drive.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum Drive {
+    /// Switch drive.
+    Switch { name: String, enabled: bool },
+
+    /// Group drive.
+    Group { name: String, label: String },
+}
+
+impl Drive {
+    fn from_raw<'de, D>(raw: RawDrive) -> Result<Drive, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let option = match raw {
+            RawDrive::Switch { name, enabled } => Drive::Switch { name, enabled },
+            RawDrive::Group { name, label } => Drive::Group { name, label },
+        };
+        Ok(option)
+    }
+}
+
+impl<'de> Deserialize<'de> for Drive {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawDrive::deserialize(deserializer)?;
+        Drive::from_raw::<'de, D>(raw)
+    }
+}
+
+/// Resolved driver layer.
+#[derive(Debug, Clone)]
+pub struct ResolvedDriver {
+    pub name: String,
+    pub options: Vec<ResolvedDriverOption>,
+}
+
+impl ResolvedDriver {
+    /// Resolves the layer.
+    pub fn resolve(descriptor: &Descriptor, driver: &Driver) -> ResolvedDriver {
+        let options = driver
+            .options
+            .iter()
+            .map(|o| ResolvedDriverOption::resolve(descriptor, o))
+            .collect();
+        ResolvedDriver {
+            name: driver.name.clone(),
+            options,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedDriverOption {
+    pub label: String,
+    pub drives: Vec<ResolvedDrive>,
+}
+
+impl ResolvedDriverOption {
+    fn resolve(descriptor: &Descriptor, option: &DriverOption) -> ResolvedDriverOption {
+        let drives = option
+            .drives
+            .iter()
+            .map(|d| ResolvedDrive::resolve(descriptor, d))
+            .collect();
+        ResolvedDriverOption {
+            label: option.label.clone(),
+            drives,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ResolvedDrive {
+    Integer { name: String, index: usize },
+    Bool { name: String, enabled: bool },
+}
+
+impl ResolvedDrive {
+    fn resolve(descriptor: &Descriptor, drive: &Drive) -> ResolvedDrive {
+        match drive {
+            Drive::Switch { name, enabled } => {
+                // Group name is already validated.
+                ResolvedDrive::Bool {
+                    name: name.clone(),
+                    enabled: *enabled,
+                }
+            }
+            Drive::Group { name, label } => {
+                let group = descriptor
+                    .shape_groups
+                    .iter()
+                    .find(|g| &g.common.name == name)
+                    .expect("Parameter name not found");
+
+                let resolved_index = group
+                    .options
+                    .iter()
+                    .enumerate()
+                    .find_map(|(i, o)| {
+                        if &o.label == label {
+                            Some(o.index.map(|x| x.get()).unwrap_or(i + 1))
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("Label not found");
+                ResolvedDrive::Integer {
+                    name: name.clone(),
+                    index: resolved_index,
+                }
+            }
+        }
     }
 }

@@ -5,6 +5,7 @@ pub struct RawDescriptor {
     pub name: String,
     pub shape_switches: Option<Vec<RawShapeKeySwitch>>,
     pub shape_groups: Option<Vec<RawShapeKeyGroup>>,
+    pub drivers: Option<Vec<RawDriver>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,4 +52,23 @@ pub enum RawShapeKeyOption {
 pub enum RawShapeKeyDrive {
     Simple(String),
     Complex { shape: String, value: Option<f64> },
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RawDriver {
+    pub name: String,
+    pub options: Vec<RawDriverOption>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RawDriverOption {
+    pub label: String,
+    pub drives: Vec<RawDrive>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum RawDrive {
+    Switch { name: String, enabled: bool },
+    Group { name: String, label: String },
 }

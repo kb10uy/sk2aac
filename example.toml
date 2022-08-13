@@ -1,0 +1,78 @@
+# アバター名。クラス名などで使用される。空白不可。
+name = "AvatarName"
+
+# -----------------------------------------------------------------------------
+
+# Int Parameter で駆動される、択一式のアニメーション。
+[[shape_groups]]
+# パラメーター名。レイヤー名にも使用される。
+name = "Eyelids"
+
+# 対象の SkinnedMeshRenderer の GameObject 名。
+mesh = "Face"
+
+# このグループのいずれかのオプションが選択されている場合、
+# VRC_AnimatorTrackingControl で目のトラッキングを停止する。
+prevent_eyelids = true
+
+# このグループのいずれかのオプションが選択されている場合、
+# VRC_AnimatorTrackingControl で目のトラッキングを停止する。
+# prevent_mouth = false
+
+# どのオプションも選択されていない場合のデフォルト値。
+# options で指定されていないものは無視される(書き込まれない)。
+# defaults = [{ shape = "eyelid_jito", value = 0.4 }]
+
+# 選択可能なオプションのリスト。文字列形式とテーブル形式で指定が可能。
+options = [
+    # ラベルと BlendShape の名前が一致していて value が 1.0 の場合。
+    "eyelids_smile",
+
+    # ラベルと BlendShape の名前が一致していて value を任意に指定する場合。
+    { label = "eyelids_close", value = 0.5 },
+
+    # ラベルと異なる名前の BlendShape を駆動する場合。
+    { label = "eyelids_close_1", shapes = [
+        { shape = "eyelids_close", value = 0.5 },
+    ] },
+    { label = "eyelids_close_2", shapes = [
+        { shape = "eyelids_close", value = 1.0 },
+    ] },
+]
+
+# -----------------------------------------------------------------------------
+
+# Bool Parameter で駆動される、有効・無効を切り替えられるアニメーション。
+[[shape_switches]]
+name = "Cheek"
+mesh = "Face"
+# prevent_eyelids = false
+# prevent_mouth = false
+
+# 駆動する BlendShape 名。
+shape = "face_cheek"
+
+# 有効なときの値。
+# enabled_value = 0.6
+
+# 無効なときの値。
+# disabled_value = 0.3
+
+# -----------------------------------------------------------------------------
+
+# ParameterDriver で別の Group などを駆動するレイヤー。
+[[drivers]]
+# レイヤー名。
+name = "FacialExpression"
+
+# 各オプションの情報。
+[[drivers.options]]
+
+# 表示されるステート名。
+label = "Smile"
+
+# 駆動対象。
+drives = [
+    { name = "Eyelids", label = "eyelids_smile" },
+    { name = "Cheek", enabled = true },
+]

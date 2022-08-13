@@ -1,6 +1,8 @@
 use crate::{
     codegen::CodeWriter,
-    descriptor::{Descriptor, ShapeKeyGroup, ShapeKeySwitch},
+    descriptor::{
+        Descriptor, Driver, ResolvedDrive, ResolvedDriver, ShapeKeyGroup, ShapeKeySwitch,
+    },
 };
 
 use std::{
@@ -8,6 +10,8 @@ use std::{
     io::{prelude::*, Result as IoResult},
     iter::{once, repeat, zip},
 };
+
+const ALIGN_UNIT: usize = 8;
 
 /// Reads the descriptor and generates AAC code.
 pub fn write_descriptor_code<W: Write>(writer: &mut W, descriptor: Descriptor) -> IoResult<String> {
@@ -122,6 +126,12 @@ impl AacObject for BehaviourClass {
             descriptor,
         } = self;
 
+        let resolved_drivers: Vec<_> = descriptor
+            .drivers
+            .iter()
+            .map(|d| ResolvedDriver::resolve(&descriptor, d))
+            .collect();
+
         w.write(format_args!(r#"public class {class_name} : MonoBehaviour"#))?;
         w.with_block(|mut cw| {
             cw.write(r#"public void GenerateAnimator()"#)?;
@@ -179,6 +189,10 @@ impl AacObject for BehaviourClass {
                 for group in descriptor.shape_groups {
                     cw.write_empty()?;
                     ShapeKeyGroupLayer::new(group).write_into(&mut cw)?;
+                }
+                for driver in resolved_drivers {
+                    cw.write_empty()?;
+                    DriverLayer::new(driver).write_into(&mut cw)?;
                 }
                 Ok(())
             })
@@ -328,8 +342,6 @@ impl AacObject for ShapeKeySwitchLayer {
 struct ShapeKeyGroupLayer(ShapeKeyGroup);
 
 impl ShapeKeyGroupLayer {
-    const ALIGN_UNIT: usize = 8;
-
     fn new(group: ShapeKeyGroup) -> Self {
         ShapeKeyGroupLayer(group)
     }
@@ -387,7 +399,7 @@ impl AacObject for ShapeKeyGroupLayer {
                 // State
                 let mut statedef = StateDefinition::new(state_name.clone(), state_label)
                     .blend_shapes(blend_shapes);
-                if i % Self::ALIGN_UNIT == 0 {
+                if i % ALIGN_UNIT == 0 {
                     statedef = statedef.right_of(right_of);
                     right_of = state_name.clone();
                 }
@@ -643,6 +655,7 @@ impl AacObject for StateDefinition {
 struct StateOptions {
     state_var: String,
     options: Vec<StateOption>,
+    driving: bool,
 }
 
 impl StateOptions {
@@ -650,6 +663,7 @@ impl StateOptions {
         StateOptions {
             state_var: state_var.into(),
             options: vec![],
+            driving: false,
         }
     }
 
@@ -662,6 +676,12 @@ impl StateOptions {
         self.options.push(StateOption::Animates(target));
         self
     }
+
+    fn drives(mut self, drive: ResolvedDrive) -> Self {
+        self.driving = true;
+        self.options.push(StateOption::DrivesParameter(drive));
+        self
+    }
 }
 
 impl AacObject for StateOptions {
@@ -670,9 +690,17 @@ impl AacObject for StateOptions {
             return Ok(());
         }
 
-        let StateOptions { state_var, options } = self;
+        let StateOptions {
+            state_var,
+            options,
+            driving,
+        } = self;
         w.write_yield(|w| {
             write!(w, r#"{state_var}"#)?;
+            if driving {
+                write!(w, r#".DrivingLocally()"#)?;
+            }
+
             for option in options {
                 match option {
                     StateOption::Tracks(at) => {
@@ -680,6 +708,18 @@ impl AacObject for StateOptions {
                     }
                     StateOption::Animates(at) => {
                         write!(w, r#".TrackingAnimates({})"#, at.tracking_element())?
+                    }
+                    StateOption::DrivesParameter(drive) => {
+                        write!(w, r#".Drives("#)?;
+                        match drive {
+                            ResolvedDrive::Integer { name, index } => {
+                                write!(w, r#"layer.IntParameter("{name}"), {index}"#,)?;
+                            }
+                            ResolvedDrive::Bool { name, enabled } => {
+                                write!(w, r#"layer.BoolParameter("{name}"), {enabled}"#,)?;
+                            }
+                        }
+                        write!(w, r#")"#)?
                     }
                 }
             }
@@ -692,6 +732,7 @@ impl AacObject for StateOptions {
 enum StateOption {
     Tracks(AnimationTarget),
     Animates(AnimationTarget),
+    DrivesParameter(ResolvedDrive),
 }
 
 /// `state.TransitionTo()...`
@@ -824,5 +865,64 @@ impl Cond {
             }
         }
         Ok(())
+    }
+}
+
+/// `// Driver ...`
+struct DriverLayer(ResolvedDriver);
+
+impl DriverLayer {
+    fn new(driver: ResolvedDriver) -> DriverLayer {
+        DriverLayer(driver)
+    }
+}
+
+impl AacObject for DriverLayer {
+    fn write_into<W: Write>(self, w: &mut CodeWriter<W>) -> IoResult<()> {
+        let driver = self.0;
+
+        w.write(format_args!(r#"// Driver "{}""#, driver.name))?;
+        w.with_block(|mut b| {
+            LayerDefinition::new(format!("{}", driver.name)).write_into(&mut b)?;
+            ParameterDefinition::integer(driver.name).write_into(&mut b)?;
+            StateDefinition::new("waiting", "0: Waiting").write_into(&mut b)?;
+
+            let mut right_of = "waiting".to_string();
+            for (i, option) in driver.options.into_iter().enumerate() {
+                let index = i + 1;
+
+                let state_name = format!("option{index}");
+                let state_label = format!("{index}: {}", option.label);
+
+                // State
+                b.write_empty()?;
+                let mut statedef = StateDefinition::new(state_name.clone(), state_label);
+                if i % ALIGN_UNIT == 0 {
+                    statedef = statedef.right_of(right_of);
+                    right_of = state_name.clone();
+                }
+                statedef.write_into(&mut b)?;
+                let mut state_options = StateOptions::new(state_name.clone());
+                for drive in option.drives {
+                    state_options = state_options.drives(drive);
+                }
+                state_options.write_into(&mut b)?;
+
+                // Transitions
+                Transition::new("waiting", state_name.clone())
+                    .cond(Cond::Term(Expr::IntEqual(
+                        ParameterDefinition::DEFAULT_VARNAME.into(),
+                        index,
+                    )))
+                    .write_into(&mut b)?;
+                Transition::exits(state_name.clone())
+                    .cond(Cond::Term(Expr::IntNotEqual(
+                        ParameterDefinition::DEFAULT_VARNAME.into(),
+                        index,
+                    )))
+                    .write_into(&mut b)?;
+            }
+            Ok(())
+        })
     }
 }
