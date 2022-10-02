@@ -87,6 +87,7 @@ impl AacObject for CustomEditorClass {
         let class_name = self.0;
 
         w.with_ifdef("UNITY_EDITOR", |mut ce| {
+            ce.write(format_args!(r#"[CustomEditor(typeof({class_name}))]"#))?;
             ce.write(format_args!(r#"public class {class_name}_Editor : Editor"#))?;
             ce.with_block(|mut ce| {
                 ce.write(r#"public override void OnInspectorGUI()"#)?;
@@ -134,6 +135,9 @@ impl AacObject for BehaviourClass {
 
         w.write(format_args!(r#"public class {class_name} : MonoBehaviour"#))?;
         w.with_block(|mut cw| {
+            cw.write(r#"public AnimatorController TargetContainer;"#)?;
+            cw.write(r#"public string AssetKey = "SK2AAC";"#)?;
+            cw.write_empty()?;
             cw.write(r#"public void GenerateAnimator()"#)?;
             cw.with_block(|mut cw| {
                 cw.write(r#"var avatarDescriptor = GetComponent<VRCAvatarDescriptor>();"#)?;
@@ -621,6 +625,7 @@ impl AacObject for StateDefinition {
                 if let Some(blend_shapes) = self.blend_shapes {
                     b.with_indent(|mut b| {
                         for (name, value) in blend_shapes {
+                            let value = value * 100.0;
                             b.write(format_args!(
                                 r#".BlendShape({renderer}, "{name}", {value:.1}f)"#
                             ))?;
@@ -641,6 +646,7 @@ impl AacObject for StateDefinition {
                 write!(w, r#".WithAnimation(aac.NewClip()"#)?;
                 if let Some(blend_shapes) = self.blend_shapes {
                     for (name, value) in blend_shapes {
+                        let value = value * 100.0;
                         write!(w, r#".BlendShape({renderer}, "{name}", {value:.1}f)"#)?;
                     }
                 }
